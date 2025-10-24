@@ -1,8 +1,6 @@
 # Imports
 from pyfiglet import Figlet
 from book import Book
-import openai
-import os
 import streamlit as st
 import json
 
@@ -51,10 +49,6 @@ def get_option(options):
 
 # Main function
 def main():
-    # Set the OpenAI API key
-    #openai.api_key = get_api_key()
-    openai.api_key = os.getenv("OPENAI_KEY")
-
     # Draw the title
     draw('BookGPT')
 

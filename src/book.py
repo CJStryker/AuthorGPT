@@ -1,9 +1,11 @@
-import openai
 from tqdm import tqdm
 import prompts
 import random
 from datetime import datetime, timezone, timedelta
 import time
+from typing import List, Dict, Optional
+
+from ollama_client import chat, OllamaError
 
 class Book:
     def __str__(self):
@@ -192,25 +194,24 @@ class Book:
         return words
 
     @staticmethod
-    def get_response(prompt, max_retries=5):
-      retries = 0
-      while retries < max_retries:
-          try:
-              response = openai.ChatCompletion.create(
-                  model="gpt-3.5-turbo",
-                  messages=prompt
-              )["choices"][0]["message"]["content"]
-              # append prompt and response to log file
-              with open("log.txt", "a") as f:
-                  f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")                
-              return response
-          except Exception as e:
-              retries += 1
-              print(f"An error occurred: {e}. Retrying ({retries}/{max_retries})...")
-              time.sleep(20)  # wait 60 second before retrying
+    def get_response(prompt: List[Dict[str, str]], max_retries: int = 5) -> str:
+        retries = 0
+        last_error: Optional[Exception] = None
+        while retries < max_retries:
+            try:
+                response = chat(prompt)
+                with open("log.txt", "a") as f:
+                    f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
+                return response
+            except OllamaError as exc:
+                last_error = exc
+                retries += 1
+                print(f"An error occurred: {exc}. Retrying ({retries}/{max_retries})...")
+                time.sleep(20)
 
-      # Raise an exception if all retries fail
-      raise Exception(f"Failed to get a response after {max_retries} retries.")
+        if last_error is None:
+            raise OllamaError("Unknown error while requesting a response")
+        raise OllamaError(f"Failed to get a response after {max_retries} retries.") from last_error
 
     @staticmethod
     def output(message):
