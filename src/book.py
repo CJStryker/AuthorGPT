@@ -5,6 +5,11 @@ from datetime import datetime, timezone, timedelta
 import time
 from typing import List, Dict, Optional
 
+try:
+    import openai  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    openai = None
+
 from ollama_client import chat, OllamaError
 
 class Book:
@@ -22,11 +27,19 @@ class Book:
         return book_structure
       
     def __init__(self, **kwargs):
+        excluded_keys = {'tolerance', 'llm_backend', 'openai_model', 'ollama_options'}
         # Joining the keyword arguments into a single string
-        self.arguments = '; '.join([f'{key}: {value}' for key, value in kwargs.items() if key != 'tolerance'])
+        self.arguments = '; '.join([
+            f'{key}: {value}' for key, value in kwargs.items() if key not in excluded_keys
+        ])
 
         # Get 'tolerance' attribute from kwargs
         self.tolerance = kwargs.get('tolerance', 0.9)
+
+        # Configure LLM preferences
+        self.llm_backend = kwargs.get('llm_backend', 'openai').lower()
+        self.openai_model = kwargs.get('openai_model', 'gpt-3.5-turbo')
+        self.ollama_options = kwargs.get('ollama_options')
 
         # Assign a status variable
         self.status = 0
@@ -118,14 +131,7 @@ class Book:
         # Ensure it's 4 digits long
         random_number = str(random_number).zfill(random.randint(7, 10))
         with open(f'book{random_number}.md', 'w') as file:
-            file.write(f'# {self.title}\n\n')
-            for chapter in self.content:
-                file.write(f'## {self.chapters[self.content.index(chapter)]["title"]}\n\n')
-                for paragraph in chapter:
-                    file.write(
-                        f'### {self.chapters[self.content.index(chapter)]["paragraphs"][chapter.index(paragraph)]["title"]}\n\n'
-                              )
-                    file.write(paragraph + '\n\n')
+            file.write(self.to_markdown())
 
     def get_chapter(self, chapter_index, prompt):
         if len(self.base_prompt) <= 9:
@@ -193,25 +199,57 @@ class Book:
             words.append([int(x['words']) for x in chapter['paragraphs']])
         return words
 
-    @staticmethod
-    def get_response(prompt: List[Dict[str, str]], max_retries: int = 5) -> str:
+    def get_response(self, prompt: List[Dict[str, str]], max_retries: int = 5) -> str:
         retries = 0
         last_error: Optional[Exception] = None
+        backend = self.llm_backend
         while retries < max_retries:
             try:
-                response = chat(prompt)
+                if backend == 'ollama':
+                    response = chat(prompt, options=self.ollama_options)
+                elif backend == 'openai':
+                    if openai is None:  # pragma: no cover - dependency guard
+                        raise RuntimeError('openai package is not installed')
+                    response = openai.ChatCompletion.create(  # type: ignore[attr-defined]
+                        model=self.openai_model,
+                        messages=prompt
+                    )["choices"][0]["message"]["content"]
+                else:
+                    raise RuntimeError(f"Unsupported LLM backend: {backend}")
+
                 with open("log.txt", "a") as f:
                     f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
                 return response
             except OllamaError as exc:
                 last_error = exc
-                retries += 1
-                print(f"An error occurred: {exc}. Retrying ({retries}/{max_retries})...")
-                time.sleep(20)
+            except Exception as exc:  # pragma: no cover - runtime/network failure
+                last_error = exc
+
+            retries += 1
+            print(f"An error occurred: {last_error}. Retrying ({retries}/{max_retries})...")
+            time.sleep(20)
 
         if last_error is None:
-            raise OllamaError("Unknown error while requesting a response")
-        raise OllamaError(f"Failed to get a response after {max_retries} retries.") from last_error
+            raise RuntimeError("Unknown error while requesting a response")
+        raise RuntimeError(f"Failed to get a response after {max_retries} retries.") from last_error
+
+    def to_markdown(self) -> str:
+        if not hasattr(self, 'content'):
+            raise ValueError('Content not generated yet.')
+
+        lines = [f'# {getattr(self, "title", "Untitled Book")}']
+        for chapter_index, (chapter_meta, paragraphs) in enumerate(zip(self.chapters, self.content), start=1):
+            lines.append('')
+            lines.append(f'## Chapter {chapter_index}: {chapter_meta["title"]}')
+            lines.append('')
+            for paragraph_index, paragraph in enumerate(paragraphs, start=1):
+                paragraph_meta = chapter_meta['paragraphs'][paragraph_index - 1]
+                lines.append(f'### {paragraph_meta["title"]}')
+                lines.append('')
+                lines.append(paragraph)
+                lines.append('')
+
+        return '\n'.join(lines).strip() + '\n'
 
     @staticmethod
     def output(message):
