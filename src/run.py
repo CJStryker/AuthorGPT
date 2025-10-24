@@ -171,9 +171,18 @@ def main():
     print('Generating book...')
 
     book.finish_base()
-    book.get_content()
-    book.save_book()
-    print('Book saved.')
+    try:
+        book.get_content()
+    except Exception as exc:
+        if getattr(book, 'last_saved_path', None):
+            print(f'Generation interrupted: {exc}')
+            print(f'Partial book saved to {book.last_saved_path}.')
+        else:
+            print(f'Failed to generate the book: {exc}')
+        return
+
+    path = book.save_book()
+    print(f'Book saved to {path}.')
 
 # Run the main function
 if __name__ == "__main__":

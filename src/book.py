@@ -5,6 +5,14 @@ from datetime import datetime, timezone, timedelta
 import time
 from typing import List, Dict, Optional
 
+
+class GenerationInterrupted(RuntimeError):
+    """Raised when generation stops mid-chapter but partial content exists."""
+
+    def __init__(self, message: str, partial_chapter: List[str]):
+        super().__init__(message)
+        self.partial_chapter = partial_chapter
+
 try:
     import openai  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
@@ -40,6 +48,10 @@ class Book:
         self.llm_backend = kwargs.get('llm_backend', 'openai').lower()
         self.openai_model = kwargs.get('openai_model', 'gpt-3.5-turbo')
         self.ollama_options = kwargs.get('ollama_options')
+
+        # Track whether only partial content is available
+        self.partial_content = False
+        self.last_saved_path: Optional[str] = None
 
         # Assign a status variable
         self.status = 0
@@ -115,15 +127,26 @@ class Book:
         if not hasattr(self, 'chapters'):
             raise ValueError('Structure not generated yet.')
 
-        chapters = []
-        for i in tqdm(range(len(self.chapters))):
-            prompt = self.base_prompt.copy()
-            chapter = self.get_chapter(i, prompt.copy())
-            chapters.append(chapter)
-        self.content = chapters
-        return self.content
+        chapters: List[List[str]] = []
+        try:
+            for i in tqdm(range(len(self.chapters))):
+                prompt = self.base_prompt.copy()
+                chapter = self.get_chapter(i, prompt.copy())
+                chapters.append(chapter)
+        except GenerationInterrupted as interrupted:
+            chapters.append(interrupted.partial_chapter)
+            self._persist_partial_content(chapters, interrupted)
+            raise RuntimeError(str(interrupted)) from interrupted.__cause__
+        except Exception:
+            if chapters:
+                self._persist_partial_content(chapters)
+            raise
+        else:
+            self.content = chapters
+            self.partial_content = False
+            return self.content
 
-    def save_book(self):
+    def save_book(self, filename: Optional[str] = None) -> str:
         # Save the book in md format
         # Corrected saving the book with the specified time
         desired_time = datetime.now(timezone(timedelta(hours=-5)))  # EST timezone
@@ -133,8 +156,12 @@ class Book:
         random_number = random.randint(1000009, 9999999)
         # Ensure it's 4 digits long
         random_number = str(random_number).zfill(random.randint(7, 10))
-        with open(f'book{random_number}.md', 'w') as file:
+        suffix = '_partial' if self.partial_content else ''
+        path = filename or f'book{random_number}{suffix}.md'
+        with open(path, 'w') as file:
             file.write(self.to_markdown())
+        self.last_saved_path = path
+        return path
 
     def get_chapter(self, chapter_index, prompt):
         if len(self.base_prompt) <= 9:
@@ -142,7 +169,14 @@ class Book:
 
         paragraphs = []
         for i in range(self.paragraph_amounts[chapter_index]):
-            paragraph = self.get_paragraph(prompt.copy(), chapter_index, i)
+            try:
+                paragraph = self.get_paragraph(prompt.copy(), chapter_index, i)
+            except Exception as exc:  # pragma: no cover - network/runtime failure
+                raise GenerationInterrupted(
+                    f'Failed to generate paragraph {i + 1} of chapter {chapter_index + 1}',
+                    paragraphs,
+                ) from exc
+
             prompt.append(self.get_message('user', f'!w {chapter_index + 1} {i + 1}'))
             prompt.append(self.get_message('assistant', paragraph))
             self.status += 1
@@ -241,6 +275,10 @@ class Book:
             raise ValueError('Content not generated yet.')
 
         lines = [f'# {getattr(self, "title", "Untitled Book")}']
+        if self.partial_content:
+            lines.append('')
+            lines.append('> **Note:** Generation stopped early; the content below is partial.')
+
         for chapter_index, (chapter_meta, paragraphs) in enumerate(zip(self.chapters, self.content), start=1):
             lines.append('')
             lines.append(f'## Chapter {chapter_index}: {chapter_meta["title"]}')
@@ -257,3 +295,14 @@ class Book:
     @staticmethod
     def output(message):
         print(message)
+
+    def _persist_partial_content(self, chapters: List[List[str]], error: Optional[Exception] = None) -> None:
+        """Persist partial content to disk for recovery."""
+
+        self.content = chapters
+        self.partial_content = True
+        path = self.save_book()
+        message = f'Partial book saved to {path}.'
+        if error is not None:
+            message = f'{message} Reason: {error}'
+        self.output(message)

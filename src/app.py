@@ -1,3 +1,5 @@
+from typing import Optional
+
 import streamlit as st
 from book import Book
 from utils import *
@@ -68,6 +70,7 @@ def generate_book(chapters, words, category, topic, language):
     if backend == 'openai':
         kwargs['openai_model'] = st.session_state.get('openai_model_input', 'gpt-3.5-turbo')
 
+    book: Optional[Book] = None
     try:
         with st.spinner('Generating book...'):
             book = Book(**kwargs)
@@ -78,6 +81,14 @@ def generate_book(chapters, words, category, topic, language):
             st.markdown(book.to_markdown())
     except Exception as exc:
         st.error(f'Failed to generate the book: {exc}')
+        if book and hasattr(book, 'content'):
+            try:
+                st.info('Partial content generated before the error:')
+                st.markdown(book.to_markdown())
+            except Exception:
+                pass
+        if book and getattr(book, 'last_saved_path', None):
+            st.caption(f"Partial book saved to {book.last_saved_path}.")
 
 
 def show_form():
