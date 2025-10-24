@@ -1,8 +1,11 @@
-import openai
 from tqdm import tqdm
 import prompts
 import random
 from datetime import datetime, timezone, timedelta
+import time
+from typing import List, Dict, Optional
+
+from ollama_client import chat, OllamaError
 
 class Book:
     def __str__(self):
@@ -65,12 +68,12 @@ class Book:
             self.chapters = self.convert_structure(self.structure)
 
             # Ensure self.chapters contains the actual chapter information before assigning paragraph amounts and words.
-        if isinstance(self.chapters, list):
-            self.paragraph_amounts = self.get_paragraph_amounts(self.chapters)  # updated line
-            self.paragraph_words = self.get_paragraph_words(self.chapters)  # updated line
-            return str(self.structure), self.chapters
-        else:
-            self.output('Error in converting the book structure.')
+            if isinstance(self.chapters, list):
+                self.paragraph_amounts = self.get_paragraph_amounts(self.chapters)  # updated line
+                self.paragraph_words = self.get_paragraph_words(self.chapters)  # updated line
+                return str(self.structure)
+            else:
+                self.output('Error in converting the book structure.')
 
     def finish_base(self):
         if not hasattr(self, 'title'):
@@ -153,38 +156,28 @@ class Book:
     @staticmethod
     def get_message(role, content):
         return {"role": role, "content": content}
-
+      
     @staticmethod
     def convert_structure(structure):
         chapters = structure.split("Chapter")
         chapters = [x for x in chapters if x != '']
         chapter_information = []
-
         for chapter in chapters:
-            for line in chapter.split("\n"):
-                if 'paragraphs' in line.lower():
-                    chapter_information.append(
-                      {'title': line.split('): ')[1], 'paragraphs': []}
-                                              )
-                if 'paragraph' in line.lower():
-                    chapter_information[-1]['paragraphs'].append(
-                    {'title': line.split('): ')[1], 'words': line.split(
-                      '(')[1].split(')'
-                                                                       )[0].split(
-                      ' '
-                                                                                 )[0]}
-                                                                )
-                elif chapter_information == []:
-                  ## I can't figure out the code for this
-                  chapter_information[0]['paragraphs'].append(
-                    {'title': line.split('): ')[1], 'words': line.split(
-                      '(')[1].split(')'
-                                                                       )[0].split(
-                      ' '
-                                                                                 )[0]}
-                                                                )
-                  
+            chapter_lines = chapter.split("\n")
+            if len(chapter_lines) > 1:
+                chapter_title_line = chapter_lines[0]
+                if 'paragraphs' in chapter_title_line.lower():
+                    chapter_info = {'title': chapter_title_line.split('): ')[1], 'paragraphs': []}
+                    for line in chapter_lines[1:]:
+                        if 'paragraph' in line.lower():
+                            words_info = line.split('(')[1].split(')')[0].split(' ')
+                            if len(words_info) >= 2:
+                                paragraph_title = line.split('): ')[1]
+                                paragraph_words = words_info[0]
+                                chapter_info['paragraphs'].append({'title': paragraph_title, 'words': paragraph_words})
+                    chapter_information.append(chapter_info)
         return chapter_information
+
 
     @staticmethod
     def get_paragraph_amounts(structure):
@@ -201,11 +194,24 @@ class Book:
         return words
 
     @staticmethod
-    def get_response(prompt):
-        return openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-16k-0613",
-            messages=prompt
-        )["choices"][0]["message"]["content"]
+    def get_response(prompt: List[Dict[str, str]], max_retries: int = 5) -> str:
+        retries = 0
+        last_error: Optional[Exception] = None
+        while retries < max_retries:
+            try:
+                response = chat(prompt)
+                with open("log.txt", "a") as f:
+                    f.write(f"Prompt: {prompt}\nResponse: {response}\n\n")
+                return response
+            except OllamaError as exc:
+                last_error = exc
+                retries += 1
+                print(f"An error occurred: {exc}. Retrying ({retries}/{max_retries})...")
+                time.sleep(20)
+
+        if last_error is None:
+            raise OllamaError("Unknown error while requesting a response")
+        raise OllamaError(f"Failed to get a response after {max_retries} retries.") from last_error
 
     @staticmethod
     def output(message):

@@ -1,7 +1,8 @@
 import streamlit as st
-import openai
 from book import Book
 from utils import *
+
+from ollama_client import check_connection, OLLAMA_BASE_URL, OLLAMA_MODEL
 
 valid = False
 content = ''
@@ -13,27 +14,23 @@ st.markdown('---')
 
 def initialize():
     global valid
-    # Get the API key and check if it is valid
-    api_key = st.text_input('OpenAI API Key', type='password')
-    if api_key:
-        openai.api_key = api_key
-
-        # Check if the API key is valid
-        try:
-            openai.Engine.list()
-            valid = True
-            st.success('API key is valid!')
-
-        # API key is not valid
-        except openai.error.AuthenticationError:
-            valid = False
-            st.error('API key is not valid!')
+    if check_connection():
+        valid = True
+        st.success(f'Connected to {OLLAMA_MODEL} at {OLLAMA_BASE_URL}.')
+    else:
+        valid = False
+        st.error('Unable to connect to the Ollama server.')
 
 
 def generate_book(chapters, words, category, topic, language):
-    book = Book(chapters, words, topic, category, language)
-
-    content = book.get_md()
+    book = Book(
+        chapters=chapters,
+        words_per_chapter=words,
+        topic=topic,
+        category=category,
+        language=language,
+    )
+    content = book.get_content()
     st.markdown(content)
 
 
@@ -42,10 +39,10 @@ def show_form():
     with st.form('BookGPT'):
 
         # Get the number of chapters
-        chapters = st.number_input('How many chapters should the book have?', min_value=3, max_value=100, value=5)
+        chapters = st.number_input('How many chapters should the book have?', min_value=1, max_value=100, value=10)
 
         # Get the number of words per chapter
-        words = st.number_input('How many words should each chapter have?', min_value=100, max_value=3500, value=1000,
+        words = st.number_input('How many words should each chapter have?', min_value=100, max_value=2000, value=2000,
                                 step=50)
 
         # Get the category of the book
@@ -61,9 +58,9 @@ def show_form():
         # Submit button
         submit = st.form_submit_button('Generate')
 
-        # Check if the api key was valid
+        # Check if the Ollama server is reachable
         if submit and not valid:
-            st.error('The API key is not valid!')
+            st.error('Unable to reach the Ollama server. Please try again later.')
 
         # Check if all fields are filled
         elif submit and not (chapters and words and category and topic and language):
