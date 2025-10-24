@@ -68,13 +68,16 @@ def generate_book(chapters, words, category, topic, language):
     if backend == 'openai':
         kwargs['openai_model'] = st.session_state.get('openai_model_input', 'gpt-3.5-turbo')
 
-    book = Book(**kwargs)
-    book.get_title()
-    book.get_structure()
-    book.finish_base()
-    book.get_content()
-
-    st.markdown(book.to_markdown())
+    try:
+        with st.spinner('Generating book...'):
+            book = Book(**kwargs)
+            book.get_title()
+            book.get_structure()
+            book.finish_base()
+            book.get_content()
+            st.markdown(book.to_markdown())
+    except Exception as exc:
+        st.error(f'Failed to generate the book: {exc}')
 
 
 def show_form():
@@ -82,10 +85,10 @@ def show_form():
     with st.form('BookGPT'):
 
         # Get the number of chapters
-        chapters = st.number_input('How many chapters should the book have?', min_value=1, max_value=100, value=10)
+        chapters = st.number_input('How many chapters should the book have?', min_value=1, max_value=100, value=5)
 
         # Get the number of words per chapter
-        words = st.number_input('How many words should each chapter have?', min_value=100, max_value=2000, value=2000,
+        words = st.number_input('How many words should each chapter have?', min_value=100, max_value=2000, value=1200,
                                 step=50)
 
         # Get the category of the book

@@ -112,6 +112,9 @@ class Book:
             return self.max_status
 
     def get_content(self):
+        if not hasattr(self, 'chapters'):
+            raise ValueError('Structure not generated yet.')
+
         chapters = []
         for i in tqdm(range(len(self.chapters))):
             prompt = self.base_prompt.copy()

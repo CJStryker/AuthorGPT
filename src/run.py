@@ -82,6 +82,55 @@ def get_default_book_kwargs(backend: str) -> dict:
     return data
 
 
+def prompt_with_default(prompt_text: str, default: str) -> str:
+    response = input(f"{prompt_text} [{default}]: ").strip()
+    return response or default
+
+
+def prompt_int_with_default(prompt_text: str, default: int, minimum: int = 1) -> int:
+    while True:
+        response = input(f"{prompt_text} [{default}]: ").strip()
+        if not response:
+            return default
+        try:
+            value = int(response)
+        except ValueError:
+            print('Please enter a valid number.')
+            continue
+
+        if value < minimum:
+            print(f'Please enter a value greater than or equal to {minimum}.')
+            continue
+
+        return value
+
+
+def collect_book_preferences(defaults: dict) -> dict:
+    print('Provide details for your book (press Enter to keep the default).')
+    chapters = prompt_int_with_default('How many chapters should the book have?', defaults['chapters'], minimum=1)
+    words = prompt_int_with_default(
+        'How many words should each chapter have?',
+        defaults['words_per_chapter'],
+        minimum=100,
+    )
+    category = prompt_with_default('What is the category of the book?', defaults['category'])
+    topic = prompt_with_default('What is the topic of the book?', defaults['topic'])
+
+    data = {
+        'chapters': chapters,
+        'words_per_chapter': words,
+        'category': category,
+        'topic': topic,
+        'tolerance': defaults['tolerance'],
+        'llm_backend': defaults['llm_backend'],
+    }
+
+    if defaults.get('openai_model'):
+        data['openai_model'] = defaults['openai_model']
+
+    return data
+
+
 def main():
     backend = select_backend()
 
@@ -91,7 +140,8 @@ def main():
     if get_option(['Generate a book', 'Exit']) - 1:
         return
 
-    book_kwargs = get_default_book_kwargs(backend)
+    defaults = get_default_book_kwargs(backend)
+    book_kwargs = collect_book_preferences(defaults)
     book = Book(**book_kwargs)
 
     title = book.get_title()
