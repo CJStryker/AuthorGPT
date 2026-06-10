@@ -55,6 +55,23 @@ class GenerationRecoveryTests(unittest.TestCase):
             self.assertIn('Generation stopped early', saved_text)
             self.assertIn('Generated text.', saved_text)
 
+
+    def test_markdown_uses_complete_book_format(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            book = self.make_book(output_dir)
+            book.content = [['Generated text about autosaving reliable books.']]
+
+            markdown = book.to_markdown()
+
+            self.assertIn('## Title Page', markdown)
+            self.assertIn('## Preface', markdown)
+            self.assertIn('## Table of Contents', markdown)
+            self.assertIn('# Chapter 1. Recovery', markdown)
+            self.assertIn('## 1.1 Autosaves', markdown)
+            self.assertIn('# Appendix A. Book Details', markdown)
+            self.assertIn('# Appendix B. Reading and Discussion Guide', markdown)
+            self.assertIn('# Index', markdown)
+
     def test_ollama_empty_response_raises_clear_error(self):
         response = Mock(ok=True, status_code=200)
         response.json.return_value = {'message': {'content': '   '}}

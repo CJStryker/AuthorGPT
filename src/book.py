@@ -10,6 +10,16 @@ from pathlib import Path
 import time
 from typing import List, Dict, Optional
 
+BOOK_FORMAT_SECTIONS = (
+    "Title Page",
+    "Preface",
+    "Table of Contents",
+    "Numbered Chapters",
+    "Appendix A: Book Details",
+    "Appendix B: Reading and Discussion Guide",
+    "Index",
+)
+
 
 class GenerationInterrupted(RuntimeError):
     """Raised when generation stops mid-chapter but partial content exists."""
@@ -44,6 +54,12 @@ class Book:
         self.arguments = '; '.join([
             f'{key}: {value}' for key, value in kwargs.items() if key not in excluded_keys
         ])
+
+        # Preserve user-facing book metadata for the title page, preface, and appendix.
+        self.book_metadata = {
+            key: value for key, value in kwargs.items()
+            if key not in excluded_keys and value not in (None, '')
+        }
 
         # Get 'tolerance' attribute from kwargs
         self.tolerance = kwargs.get('tolerance', 0.9)
@@ -315,23 +331,177 @@ class Book:
         if not hasattr(self, 'content'):
             raise ValueError('Content not generated yet.')
 
-        lines = [f'# {getattr(self, "title", "Untitled Book")}']
-        if self.partial_content:
-            lines.append('')
-            lines.append('> **Note:** Generation stopped early; the content below is partial.')
+        title = self._clean_title(getattr(self, "title", "Untitled Book"))
+        topic = self.book_metadata.get('topic', 'the requested subject')
+        category = self.book_metadata.get('category', 'General')
+        language = self.book_metadata.get('language', 'English')
 
-        for chapter_index, (chapter_meta, paragraphs) in enumerate(zip(self.chapters, self.content), start=1):
-            lines.append('')
-            lines.append(f'## Chapter {chapter_index}: {chapter_meta["title"]}')
-            lines.append('')
-            for paragraph_index, paragraph in enumerate(paragraphs, start=1):
-                paragraph_meta = chapter_meta['paragraphs'][paragraph_index - 1]
-                lines.append(f'### {paragraph_meta["title"]}')
-                lines.append('')
-                lines.append(paragraph)
-                lines.append('')
+        lines = [f'# {title}']
+        lines.extend(self._title_page_lines(title, topic, category, language))
+        lines.extend(self._preface_lines(title, topic, category, language))
+        lines.extend(self._table_of_contents_lines())
+        lines.extend(self._chapter_lines())
+        lines.extend(self._appendix_lines(topic, category, language))
+        lines.extend(self._index_lines())
 
         return '\n'.join(lines).strip() + '\n'
+
+    def _title_page_lines(self, title: str, topic: object, category: object, language: object) -> List[str]:
+        lines = [
+            '',
+            '## Title Page',
+            '',
+            f'**Title:** {title}',
+            '',
+            f'**Category:** {category}',
+            '',
+            f'**Primary Topic:** {topic}',
+            '',
+            f'**Language:** {language}',
+            '',
+            '**Format:** Preface, table of contents, numbered chapters, appendices, and index.',
+        ]
+        if self.partial_content:
+            lines.extend([
+                '',
+                '> **Note:** Generation stopped early; the content below is partial.',
+            ])
+        return lines
+
+    def _preface_lines(self, title: str, topic: object, category: object, language: object) -> List[str]:
+        return [
+            '',
+            '## Preface',
+            '',
+            (
+                f'{title} is organized as a complete {category} book about {topic}. '
+                'The front matter introduces the purpose and layout before the numbered chapters begin, '
+                'so the reader can understand the promise of the book before entering the main text.'
+            ),
+            '',
+            (
+                f'This edition is prepared in {language} and follows a traditional long-form structure: '
+                'a title page, preface, table of contents, numbered chapters with numbered sections, '
+                'appendices for reference material, and an index for quick lookup.'
+            ),
+        ]
+
+    def _table_of_contents_lines(self) -> List[str]:
+        lines = ['', '## Table of Contents', '']
+        lines.append('1. Preface')
+        next_number = 2
+        for chapter_index, chapter_meta in enumerate(self.chapters, start=1):
+            lines.append(f'{next_number}. Chapter {chapter_index}. {chapter_meta["title"]}')
+            next_number += 1
+        lines.append(f'{next_number}. Appendix A. Book Details')
+        next_number += 1
+        lines.append(f'{next_number}. Appendix B. Reading and Discussion Guide')
+        next_number += 1
+        lines.append(f'{next_number}. Index')
+        return lines
+
+    def _chapter_lines(self) -> List[str]:
+        lines: List[str] = []
+        for chapter_index, (chapter_meta, paragraphs) in enumerate(zip(self.chapters, self.content), start=1):
+            lines.extend(['', f'# Chapter {chapter_index}. {chapter_meta["title"]}', ''])
+            for paragraph_index, paragraph in enumerate(paragraphs, start=1):
+                paragraph_meta = chapter_meta['paragraphs'][paragraph_index - 1]
+                lines.extend([
+                    f'## {chapter_index}.{paragraph_index} {paragraph_meta["title"]}',
+                    '',
+                    paragraph.strip(),
+                    '',
+                ])
+        return lines
+
+    def _appendix_lines(self, topic: object, category: object, language: object) -> List[str]:
+        completed_chapters = sum(1 for chapter in getattr(self, 'content', []) if chapter)
+        completed_sections = sum(len(chapter) for chapter in getattr(self, 'content', []))
+        requested_chapters = self.book_metadata.get('chapters', len(getattr(self, 'chapters', [])))
+        requested_words = self.book_metadata.get('words_per_chapter', 'not specified')
+
+        return [
+            '',
+            '# Appendix A. Book Details',
+            '',
+            '## A.1 Project Summary',
+            '',
+            f'This book was generated for the topic “{topic}” in the {category} category.',
+            '',
+            '## A.2 Generation Parameters',
+            '',
+            f'1. Requested chapters: {requested_chapters}.',
+            f'2. Requested words per chapter: {requested_words}.',
+            f'3. Completed chapters in this file: {completed_chapters}.',
+            f'4. Completed numbered sections in this file: {completed_sections}.',
+            f'5. Language: {language}.',
+            '',
+            '# Appendix B. Reading and Discussion Guide',
+            '',
+            '## B.1 Suggested Use',
+            '',
+            'Read the preface first, then move through the numbered chapters in order. Use the index after reading to revisit important ideas, names, and settings.',
+            '',
+            '## B.2 Discussion Questions',
+            '',
+            '1. Which chapter best states the central promise of the book?',
+            '2. Which numbered section would benefit most from expansion in a later edition?',
+            '3. What theme, setting, or practical idea should the appendix preserve for reference?',
+        ]
+
+    def _index_lines(self) -> List[str]:
+        entries: Dict[str, List[str]] = {}
+
+        def add_entry(term: str, location: str) -> None:
+            cleaned = self._clean_index_term(term)
+            if not cleaned:
+                return
+            entries.setdefault(cleaned, [])
+            if location not in entries[cleaned]:
+                entries[cleaned].append(location)
+
+        for raw_term in (getattr(self, 'title', ''), self.book_metadata.get('topic', ''), self.book_metadata.get('category', '')):
+            for term in self._candidate_index_terms(str(raw_term)):
+                add_entry(term, 'Preface')
+
+        for chapter_index, chapter_meta in enumerate(getattr(self, 'chapters', []), start=1):
+            add_entry(chapter_meta['title'], f'Chapter {chapter_index}')
+            for paragraph_index, paragraph_meta in enumerate(chapter_meta['paragraphs'], start=1):
+                add_entry(paragraph_meta['title'], f'{chapter_index}.{paragraph_index}')
+
+        lines = ['', '# Index', '']
+        if not entries:
+            lines.append('No index entries are available yet.')
+            return lines
+
+        for term in sorted(entries):
+            lines.append(f'- **{term}:** {", ".join(entries[term])}')
+        return lines
+
+    @staticmethod
+    def _clean_title(title: str) -> str:
+        return title.strip().strip('"') or 'Untitled Book'
+
+    @staticmethod
+    def _candidate_index_terms(text: str) -> List[str]:
+        return re.findall(r"[A-Za-z][A-Za-z0-9’'’-]*(?:\s+[A-Za-z][A-Za-z0-9’'’-]*){0,3}", text)[:6]
+
+    @staticmethod
+    def _clean_index_term(term: str) -> str:
+        cleaned = re.sub(r'\s+', ' ', term).strip(' .,:;#"')
+        stopwords = {
+            'a', 'an', 'the', 'and', 'or', 'for', 'with', 'book', 'chapter',
+            'about', 'that', 'to', 'in', 'of', 'as', 'well', 'while', 'its',
+        }
+        words = cleaned.split()
+        while words and words[0].lower() in stopwords:
+            words.pop(0)
+        while words and words[-1].lower() in stopwords:
+            words.pop()
+        cleaned = ' '.join(words)
+        if len(cleaned) < 3 or cleaned.lower() in stopwords:
+            return ''
+        return cleaned
 
     @staticmethod
     def output(message):

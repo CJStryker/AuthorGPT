@@ -58,6 +58,8 @@ You will then be prompted to enter the following information:
 The program will then generate a Title and Chapter Titles + Content. You will get a detailed structure of the book.
 Generated books are saved as Markdown files in the current directory by default. Set `BOOKGPT_OUTPUT_DIR` to choose a different output folder. Partial progress is autosaved after each completed paragraph so an Ollama crash or timeout does not overwrite existing content with an empty file.
 
+Generated Markdown uses a complete book layout: title page, preface, table of contents, numbered chapters with numbered sections, appendices, and an index.
+
 
 ## Examples
 Here are some examples:
