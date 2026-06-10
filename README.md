@@ -18,13 +18,36 @@ pip install -r requirements.txt
 
 
 ## Prerequisites
-In order to use this program, you must have a [ChatGPT API key](https://beta.openai.com/account/api-keys). The API Key must then be inserted into the `config.json` file.
+BookGPT can generate with either Ollama (default) or OpenAI.
+
+### Ollama (default)
+1. Install and start [Ollama](https://ollama.com/).
+2. Pull a chat model, for example:
+```bash
+ollama pull llama3.1
+```
+3. If you use a different host or model, configure it with environment variables:
+```bash
+export OLLAMA_BASE_URL=http://localhost:11434
+export OLLAMA_MODEL=llama3.1
+export OLLAMA_TIMEOUT=300
+```
+
+The Streamlit app also exposes the Ollama base URL, model, and timeout fields in the UI.
+
+### OpenAI (optional)
+To use OpenAI instead, install the dependencies, set `BOOKGPT_BACKEND=openai`, and provide `OPENAI_KEY`.
 
 
 ## Usage
-To use this program, simply run the following command in your terminal:
+To use this program from the terminal, run:
 ```bash
-python run.py
+python src/run.py
+```
+
+To use the Streamlit interface, run:
+```bash
+streamlit run src/app.py
 ```
 You will then be prompted to enter the following information:
 - Chapter Amount: The amount of chapters you want the book to have.
@@ -33,7 +56,7 @@ You will then be prompted to enter the following information:
 - Category: The type of book you want to generate. (Science, Biography, etc.)
 
 The program will then generate a Title and Chapter Titles + Content. You will get a detailed structure of the book.
-The generated books will then be saved as `book.md` in `BookGPT/src`.
+Generated books are saved as Markdown files in the current directory by default. Set `BOOKGPT_OUTPUT_DIR` to choose a different output folder. Partial progress is autosaved after each completed paragraph so an Ollama crash or timeout does not overwrite existing content with an empty file.
 
 
 ## Examples
