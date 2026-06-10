@@ -28,12 +28,12 @@ ollama pull llama3.1
 ```
 3. If you use a different host or model, configure it with environment variables:
 ```bash
-export OLLAMA_BASE_URL=http://localhost:11434
-export OLLAMA_MODEL=llama3.1
+export OLLAMA_BASE_URL=https://b88c-2607-fb90-2e06-f693-405d-1c37-476f-b7e6.ngrok-free.app
+export OLLAMA_MODEL=gpt-oss:120b-cloud
 export OLLAMA_TIMEOUT=300
 ```
 
-The Streamlit app also exposes the Ollama base URL, model, and timeout fields in the UI.
+The default Ollama URL is currently hardcoded to the project ngrok host above. The Streamlit app also exposes the Ollama base URL, model, and timeout fields in the UI so you can override it while testing.
 
 ### OpenAI (optional)
 To use OpenAI instead, install the dependencies, set `BOOKGPT_BACKEND=openai`, and provide `OPENAI_KEY`.

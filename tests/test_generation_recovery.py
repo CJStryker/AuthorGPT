@@ -7,10 +7,16 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 from book import Book
-from ollama_client import OllamaError, chat
+from ollama_client import OLLAMA_BASE_URL, OllamaError, chat
 
 
 class GenerationRecoveryTests(unittest.TestCase):
+    def test_default_ollama_base_url_is_project_ngrok_host(self):
+        self.assertEqual(
+            'https://b88c-2607-fb90-2e06-f693-405d-1c37-476f-b7e6.ngrok-free.app',
+            OLLAMA_BASE_URL,
+        )
+
     def make_book(self, output_dir):
         book = Book(
             chapters=1,

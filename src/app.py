@@ -97,6 +97,8 @@ def generate_book(chapters, words, category, topic, language):
             book.get_structure()
             book.finish_base()
             book.get_content()
+            saved_path = book.save_book()
+            st.success(f'Book saved to {saved_path}.')
             st.markdown(book.to_markdown())
     except Exception as exc:
         st.error(f'Failed to generate the book: {exc}')

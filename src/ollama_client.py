@@ -12,16 +12,21 @@ class OllamaError(RuntimeError):
     """Raised when the Ollama backend returns an error."""
 
 
+_DEFAULT_BASE_URL = "https://b88c-2607-fb90-2e06-f693-405d-1c37-476f-b7e6.ngrok-free.app"
 _DEFAULT_HOST = "localhost"
 _DEFAULT_PORT = "11434"
-_DEFAULT_MODEL = "llama3.1"
+_DEFAULT_MODEL = "gpt-oss:120b-cloud"
 _DEFAULT_TIMEOUT = 300.0
 
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", _DEFAULT_HOST)
 OLLAMA_PORT = os.getenv("OLLAMA_PORT", _DEFAULT_PORT)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", _DEFAULT_MODEL)
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", f"http://{OLLAMA_HOST}:{OLLAMA_PORT}")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL") or (
+    f"http://{OLLAMA_HOST}:{OLLAMA_PORT}"
+    if os.getenv("OLLAMA_HOST") or os.getenv("OLLAMA_PORT")
+    else _DEFAULT_BASE_URL
+)
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", str(_DEFAULT_TIMEOUT)))
 
 
@@ -60,8 +65,10 @@ def chat(
 
     request_timeout = OLLAMA_TIMEOUT if timeout is None else timeout
 
+    headers = {"ngrok-skip-browser-warning": "true"}
+
     try:
-        response = requests.post(_chat_endpoint(base_url), json=payload, timeout=request_timeout)
+        response = requests.post(_chat_endpoint(base_url), json=payload, timeout=request_timeout, headers=headers)
     except requests.Timeout as exc:  # pragma: no cover - network failure
         raise OllamaError(
             f"Timed out waiting for Ollama after {request_timeout} seconds. "
@@ -101,7 +108,11 @@ def list_models(*, base_url: Optional[str] = None, timeout: float = 5.0) -> list
     """Return model names advertised by an Ollama server."""
 
     try:
-        response = requests.get(_tags_endpoint(base_url), timeout=timeout)
+        response = requests.get(
+            _tags_endpoint(base_url),
+            timeout=timeout,
+            headers={"ngrok-skip-browser-warning": "true"},
+        )
         response.raise_for_status()
         body = response.json()
     except (requests.RequestException, ValueError) as exc:  # pragma: no cover - network failure
