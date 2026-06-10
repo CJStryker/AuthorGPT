@@ -1,15 +1,15 @@
+import importlib.util
 from typing import Optional
 
 import streamlit as st
 from book import Book
 from utils import *
 
-from ollama_client import check_connection, OLLAMA_BASE_URL, OLLAMA_MODEL
+from ollama_client import check_connection, list_models, normalize_base_url, OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OllamaError
 
-try:
+openai = None
+if importlib.util.find_spec('openai') is not None:
     import openai  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    openai = None
 
 BACKEND_OPTIONS = ('Ollama', 'OpenAI')
 valid = False
@@ -48,12 +48,26 @@ def initialize():
         else:
             valid = False
     else:
-        if check_connection():
-            valid = True
-            st.success(f'Connected to {OLLAMA_MODEL} at {OLLAMA_BASE_URL}.')
-        else:
+        st.text_input('Ollama Base URL', value=OLLAMA_BASE_URL, key='ollama_base_url_input')
+        st.text_input('Ollama Model', value=OLLAMA_MODEL, key='ollama_model_input')
+        st.number_input('Ollama Timeout (seconds)', min_value=30, max_value=1800, value=int(OLLAMA_TIMEOUT), step=30, key='ollama_timeout_input')
+
+        base_url = normalize_base_url(st.session_state.get('ollama_base_url_input', OLLAMA_BASE_URL))
+        model = st.session_state.get('ollama_model_input', OLLAMA_MODEL).strip()
+
+        try:
+            available_models = list_models(base_url=base_url)
+        except OllamaError as exc:
             valid = False
-            st.error('Unable to connect to the Ollama server.')
+            st.error(f'Unable to connect to the Ollama server: {exc}')
+        else:
+            if check_connection(model=model, base_url=base_url):
+                valid = True
+                st.success(f'Connected to {model} at {base_url}.')
+            else:
+                valid = False
+                models = ', '.join(available_models) or 'no models returned'
+                st.error(f'Ollama is reachable, but model "{model}" was not found. Available models: {models}')
 
 
 def generate_book(chapters, words, category, topic, language):
@@ -67,6 +81,11 @@ def generate_book(chapters, words, category, topic, language):
         llm_backend=backend,
     )
 
+    if backend == 'ollama':
+        kwargs['ollama_base_url'] = normalize_base_url(st.session_state.get('ollama_base_url_input', OLLAMA_BASE_URL))
+        kwargs['ollama_model'] = st.session_state.get('ollama_model_input', OLLAMA_MODEL).strip()
+        kwargs['ollama_timeout'] = st.session_state.get('ollama_timeout_input', OLLAMA_TIMEOUT)
+
     if backend == 'openai':
         kwargs['openai_model'] = st.session_state.get('openai_model_input', 'gpt-3.5-turbo')
 
@@ -78,6 +97,8 @@ def generate_book(chapters, words, category, topic, language):
             book.get_structure()
             book.finish_base()
             book.get_content()
+            saved_path = book.save_book()
+            st.success(f'Book saved to {saved_path}.')
             st.markdown(book.to_markdown())
     except Exception as exc:
         st.error(f'Failed to generate the book: {exc}')

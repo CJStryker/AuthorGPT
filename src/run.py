@@ -1,12 +1,12 @@
 # Imports
+import importlib.util
 import os
 from pyfiglet import Figlet
 from book import Book
 
-try:
+openai = None
+if importlib.util.find_spec('openai') is not None:
     import openai  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    openai = None
 
 # Draw the given text in a figlet
 def draw(text):
@@ -74,7 +74,15 @@ def get_default_book_kwargs(backend: str) -> dict:
         'topic': os.getenv('BOOKGPT_TOPIC', """William a 27-year-old boy moves to an unfamiliar city and rents a house, where he will begin a new life. He is quiet, socially awkward, and dislikes interacting with people, Nevertheless, he will inevitably encounter various situations requiring social interaction in the future, as well as many moments where friends will be needed, whether for problem-solving or emotional support. Despite his quirky personality, this also makes it easier for him to find genuine friends. These friends, while tolerating his rationality and sharpness, care about him and try their best to help him resolve the problems he encounters. His life is simple. He lives frugally, spending only the necessary money on essential daily necessities. When it comes to interpersonal relationships, he highly values "choice" and "necessity." He believes that no friend or person has any obligation to do anything for him, and he himself has no justification to demand that anyone must do anything for him. If someone tells the protagonist, "You are very important to me," he would feel flustered and overwhelmed. He takes commitments seriously and will always do his utmost to fulfill promises he has made. However, he is usually cautious and tends to avoid making promises altogether. 未自华为备意录"""),
         'tolerance': float(os.getenv('BOOKGPT_TOLERANCE', 0.6)),
         'llm_backend': backend,
+        'ollama_base_url': os.getenv('OLLAMA_BASE_URL'),
+        'ollama_model': os.getenv('OLLAMA_MODEL'),
+        'ollama_timeout': float(os.getenv('OLLAMA_TIMEOUT', '300')),
+        'max_retries': int(os.getenv('BOOKGPT_MAX_RETRIES', '3')),
+        'retry_delay': float(os.getenv('BOOKGPT_RETRY_DELAY', '5')),
+        'max_continuations': int(os.getenv('BOOKGPT_MAX_CONTINUATIONS', '6')),
     }
+
+    data = {key: value for key, value in data.items() if value is not None}
 
     if backend == 'openai':
         data['openai_model'] = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
@@ -124,6 +132,17 @@ def collect_book_preferences(defaults: dict) -> dict:
         'tolerance': defaults['tolerance'],
         'llm_backend': defaults['llm_backend'],
     }
+
+    for key in (
+        'ollama_base_url',
+        'ollama_model',
+        'ollama_timeout',
+        'max_retries',
+        'retry_delay',
+        'max_continuations',
+    ):
+        if key in defaults:
+            data[key] = defaults[key]
 
     if defaults.get('openai_model'):
         data['openai_model'] = defaults['openai_model']
